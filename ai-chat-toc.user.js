@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         AI Chat TOC & Navigator (ChatGPT & Gemini)
 // @namespace    https://github.com/
-// @version      1.0.0
-// @description  Sidebar mục lục tự động cho ChatGPT và Gemini, dạng đè lên không can thiệp layout, tự cuộn tới đoạn chat.
+// @version      1.0.1
+// @description  Sidebar mục lục tự động cho ChatGPT và Gemini, dạng đè lên không can thiệp layout, tự đóng khi click bên ngoài để đọc nội dung.
 // @author       Senior Dev
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
@@ -112,7 +112,8 @@
     :host {
       --ai-toc-primary: #3b82f6;
       --ai-toc-primary-hover: #2563eb;
-      --ai-toc-bg: rgba(255, 255, 255, 0.92);
+      --ai-toc-primary-light: rgba(59, 130, 246, 0.12);
+      --ai-toc-bg: rgba(255, 255, 255, 0.94);
       --ai-toc-bg-card: rgba(243, 244, 246, 0.85);
       --ai-toc-bg-card-hover: rgba(229, 231, 235, 1);
       --ai-toc-border: rgba(209, 213, 219, 0.7);
@@ -129,7 +130,8 @@
     :host(.dark-theme) {
       --ai-toc-primary: #60a5fa;
       --ai-toc-primary-hover: #3b82f6;
-      --ai-toc-bg: rgba(24, 24, 27, 0.92);
+      --ai-toc-primary-light: rgba(96, 165, 250, 0.15);
+      --ai-toc-bg: rgba(24, 24, 27, 0.94);
       --ai-toc-bg-card: rgba(39, 39, 42, 0.85);
       --ai-toc-bg-card-hover: rgba(63, 63, 70, 0.95);
       --ai-toc-border: rgba(82, 82, 91, 0.6);
@@ -139,6 +141,24 @@
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    .toc-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: transparent;
+      z-index: 2147483646;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .toc-backdrop.open {
+      pointer-events: auto;
+      opacity: 1;
+    }
 
     .toc-trigger-btn {
       pointer-events: auto;
@@ -151,22 +171,23 @@
       gap: 7px;
       padding: 10px 14px;
       background: var(--ai-toc-bg);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
       border: 1px solid var(--ai-toc-border);
       border-radius: 9999px;
       box-shadow: var(--ai-toc-shadow);
-      cursor: pointer;
+      cursor: grab;
       color: var(--ai-toc-text);
       font-weight: 600;
-      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: border-color 0.25s, box-shadow 0.25s, background-color 0.25s;
       user-select: none;
     }
 
+    .toc-trigger-btn:active { cursor: grabbing; }
+
     .toc-trigger-btn:hover {
-      transform: translateY(-2px) scale(1.02);
       border-color: var(--ai-toc-primary);
-      box-shadow: 0 12px 28px -5px rgba(59, 130, 246, 0.25);
+      box-shadow: 0 12px 28px -5px rgba(59, 130, 246, 0.3);
     }
 
     .toc-badge {
@@ -186,11 +207,11 @@
       top: 16px;
       right: 16px;
       bottom: 16px;
-      width: 330px;
+      width: 340px;
       max-width: calc(100vw - 32px);
       background: var(--ai-toc-bg);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
       border: 1px solid var(--ai-toc-border);
       border-radius: 16px;
       box-shadow: var(--ai-toc-shadow);
@@ -198,7 +219,7 @@
       flex-direction: column;
       overflow: hidden;
       z-index: 2147483647;
-      transform: translateX(380px);
+      transform: translateX(400px);
       opacity: 0;
       transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
     }
@@ -332,6 +353,11 @@
       transform: translateY(-1px);
     }
 
+    .toc-item.active {
+      border-color: var(--ai-toc-primary);
+      background: var(--ai-toc-primary-light);
+    }
+
     .toc-item-index {
       font-size: 11px;
       font-weight: 700;
@@ -341,6 +367,11 @@
       border-radius: 6px;
       flex-shrink: 0;
       margin-top: 1px;
+    }
+
+    .toc-item.active .toc-item-index {
+      background: var(--ai-toc-primary);
+      color: #ffffff;
     }
 
     .toc-item-text {
@@ -364,6 +395,29 @@
       flex-direction: column;
       align-items: center;
       gap: 8px;
+    }
+
+    .toc-toast {
+      position: absolute;
+      bottom: 48px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: #10b981;
+      color: #ffffff;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.25s ease;
+      z-index: 10;
+    }
+
+    .toc-toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
     }
 
     .toc-footer {
@@ -412,7 +466,7 @@
         }
         50% {
           outline: 3px solid #3b82f6;
-          box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+          box-shadow: 0 0 0 12px rgba(59, 130, 246, 0);
           background-color: rgba(59, 130, 246, 0.08);
         }
         100% {
@@ -443,6 +497,7 @@
       this.isOpen = false;
       this.searchTerm = '';
       this.debounceTimer = null;
+      this.activePromptIndex = null;
       this.lastUrl = window.location.href;
 
       if (!this.currentAdapter) return;
@@ -456,6 +511,9 @@
       this.setupObserver();
       this.setupSpaRoutingWatcher();
       this.setupKeyboardShortcuts();
+      this.setupDraggableTrigger();
+      this.setupScrollSpy();
+      this.setupClickOutside();
       this.syncTheme();
     }
 
@@ -481,7 +539,9 @@
 
       this.wrapper = document.createElement('div');
       this.wrapper.innerHTML = `
-        <button class="toc-trigger-btn" id="toc-trigger-btn" title="Mục lục Chat (Alt + T)">
+        <div class="toc-backdrop" id="toc-backdrop"></div>
+
+        <button class="toc-trigger-btn" id="toc-trigger-btn" title="Mục lục Chat (Alt + T hoặc Kéo thả)">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="8" y1="6" x2="21" y2="6"></line>
             <line x1="8" y1="12" x2="21" y2="12"></line>
@@ -510,6 +570,12 @@
               <span class="toc-platform-badge">${this.currentAdapter.name}</span>
             </div>
             <div class="toc-actions">
+              <button class="toc-icon-btn" id="toc-copy-btn" title="Sao chép toàn bộ mục lục (Markdown)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+              </button>
               <button class="toc-icon-btn" id="toc-refresh-btn" title="Quét lại nội dung">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
@@ -536,6 +602,8 @@
 
           <div class="toc-list" id="toc-list"></div>
 
+          <div class="toc-toast" id="toc-toast">Đã sao chép vào clipboard!</div>
+
           <div class="toc-footer">
             <span id="toc-count-label">0 câu hỏi</span>
             <span class="toc-shortcut-hint">Đóng/Mở: <kbd>Alt</kbd> + <kbd>T</kbd></span>
@@ -544,6 +612,7 @@
       `;
       this.shadowRoot.appendChild(this.wrapper);
 
+      this.backdropEl = this.shadowRoot.getElementById('toc-backdrop');
       this.drawerEl = this.shadowRoot.getElementById('toc-drawer');
       this.triggerBtn = this.shadowRoot.getElementById('toc-trigger-btn');
       this.badgeEl = this.shadowRoot.getElementById('toc-badge');
@@ -552,10 +621,16 @@
       this.searchInput = this.shadowRoot.getElementById('toc-search-input');
       this.closeBtn = this.shadowRoot.getElementById('toc-close-btn');
       this.refreshBtn = this.shadowRoot.getElementById('toc-refresh-btn');
+      this.copyBtn = this.shadowRoot.getElementById('toc-copy-btn');
+      this.toastEl = this.shadowRoot.getElementById('toc-toast');
 
-      this.triggerBtn.addEventListener('click', () => this.toggleDrawer());
+      this.triggerBtn.addEventListener('click', () => {
+        if (!this.wasDragging) this.toggleDrawer();
+      });
       this.closeBtn.addEventListener('click', () => this.closeDrawer());
       this.refreshBtn.addEventListener('click', () => this.scanPrompts());
+      this.copyBtn.addEventListener('click', () => this.exportMarkdownTOC());
+      this.backdropEl.addEventListener('click', () => this.closeDrawer());
 
       this.searchInput.addEventListener('input', (e) => {
         this.searchTerm = e.target.value.toLowerCase().trim();
@@ -563,11 +638,128 @@
       });
     }
 
+    setupClickOutside() {
+      window.addEventListener('pointerdown', (e) => {
+        if (!this.isOpen) return;
+        const path = e.composedPath();
+        const clickedInsideDrawer = path.includes(this.drawerEl);
+        const clickedTriggerBtn = path.includes(this.triggerBtn);
+
+        if (!clickedInsideDrawer && !clickedTriggerBtn) {
+          this.closeDrawer();
+        }
+      }, { capture: true });
+    }
+
+    setupDraggableTrigger() {
+      let isDragging = false;
+      let startY = 0;
+      let startBottom = 24;
+
+      const savedBottom = localStorage.getItem('ai_chat_toc_trigger_bottom');
+      if (savedBottom) {
+        this.triggerBtn.style.bottom = `${savedBottom}px`;
+      }
+
+      this.triggerBtn.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        isDragging = true;
+        this.wasDragging = false;
+        startY = e.clientY;
+        const computed = parseInt(window.getComputedStyle(this.triggerBtn).bottom, 10) || 24;
+        startBottom = computed;
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const deltaY = startY - e.clientY;
+        if (Math.abs(deltaY) > 4) {
+          this.wasDragging = true;
+        }
+        let newBottom = startBottom + deltaY;
+        newBottom = Math.max(16, Math.min(window.innerHeight - 70, newBottom));
+        this.triggerBtn.style.bottom = `${newBottom}px`;
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (isDragging) {
+          isDragging = false;
+          const currentBottom = parseInt(this.triggerBtn.style.bottom, 10);
+          if (!isNaN(currentBottom)) {
+            localStorage.setItem('ai_chat_toc_trigger_bottom', currentBottom);
+          }
+        }
+      });
+    }
+
+    setupScrollSpy() {
+      const handleScroll = () => {
+        if (!this.prompts.length) return;
+
+        const viewportCenter = window.innerHeight / 3;
+        let closestIndex = null;
+        let minDistance = Infinity;
+
+        this.prompts.forEach((p, idx) => {
+          const rect = p.element.getBoundingClientRect();
+          const dist = Math.abs(rect.top - viewportCenter);
+          if (dist < minDistance && rect.bottom > 0 && rect.top < window.innerHeight) {
+            minDistance = dist;
+            closestIndex = idx + 1;
+          }
+        });
+
+        if (closestIndex !== this.activePromptIndex) {
+          this.activePromptIndex = closestIndex;
+          this.updateActiveItemClass();
+        }
+      };
+
+      window.addEventListener('scroll', handleScroll, { passive: true });
+      const target = this.currentAdapter.getObserveTarget();
+      if (target) {
+        target.addEventListener('scroll', handleScroll, { passive: true });
+      }
+    }
+
+    updateActiveItemClass() {
+      const items = this.listEl.querySelectorAll('.toc-item');
+      items.forEach(el => {
+        const itemIdx = parseInt(el.getAttribute('data-index'), 10);
+        if (itemIdx === this.activePromptIndex) {
+          el.classList.add('active');
+        } else {
+          el.classList.remove('active');
+        }
+      });
+    }
+
+    exportMarkdownTOC() {
+      if (!this.prompts.length) return;
+      const mdLines = this.prompts.map(p => `${p.index}. ${p.text}`);
+      const textToCopy = `### Mục lục hội thoại (${this.currentAdapter.name})\n\n` + mdLines.join('\n');
+
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        this.showToast('Đã copy danh sách mục lục (Markdown)!');
+      }).catch(() => {
+        this.showToast('Lỗi khi sao chép!');
+      });
+    }
+
+    showToast(msg) {
+      this.toastEl.textContent = msg;
+      this.toastEl.classList.add('show');
+      setTimeout(() => {
+        this.toastEl.classList.remove('show');
+      }, 2000);
+    }
+
     toggleDrawer() { this.isOpen ? this.closeDrawer() : this.openDrawer(); }
 
     openDrawer() {
       this.isOpen = true;
       this.drawerEl.classList.add('open');
+      this.backdropEl.classList.add('open');
       this.syncTheme();
       setTimeout(() => this.searchInput.focus(), 150);
     }
@@ -575,6 +767,7 @@
     closeDrawer() {
       this.isOpen = false;
       this.drawerEl.classList.remove('open');
+      this.backdropEl.classList.remove('open');
     }
 
     syncTheme() {
@@ -637,7 +830,8 @@
 
       filtered.forEach(item => {
         const card = document.createElement('div');
-        card.className = 'toc-item';
+        card.className = `toc-item ${item.index === this.activePromptIndex ? 'active' : ''}`;
+        card.setAttribute('data-index', item.index);
         card.title = item.text;
         card.innerHTML = `
           <span class="toc-item-index">#${item.index}</span>
@@ -732,4 +926,3 @@
     new TOCController();
   }
 })();
-
